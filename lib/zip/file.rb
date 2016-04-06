@@ -66,9 +66,10 @@ module Zip
     # a new archive if it doesn't exist already.
     def initialize(file_name, create = nil, buffer = false, options = {})
       super()
-      @name    = file_name
-      @comment = ''
-      @create  = create
+      @name      = file_name
+      @comment   = ''
+      @create    = create
+      @encrypter = options[:encrypter]
       case
       when !buffer && ::File.size?(file_name)
         @create = nil
@@ -95,8 +96,8 @@ module Zip
       # Same as #new. If a block is passed the ZipFile object is passed
       # to the block and is automatically closed afterwards just as with
       # ruby's builtin File.open method.
-      def open(file_name, create = nil)
-        zf = ::Zip::File.new(file_name, create)
+      def open(file_name, create = nil, encrypter = nil)
+        zf = ::Zip::File.new(file_name, create, false, encrypter: encrypter)
         return zf unless block_given?
         begin
           yield zf
@@ -308,7 +309,7 @@ module Zip
     def commit
       return unless commit_required?
       on_success_replace do |tmp_file|
-        ::Zip::OutputStream.open(tmp_file) do |zos|
+        ::Zip::OutputStream.open(tmp_file, @encrypter) do |zos|
           @entry_set.each do |e|
             e.write_to_zip_output_stream(zos)
             e.dirty = false
@@ -318,12 +319,12 @@ module Zip
         end
         true
       end
-      initialize(name)
+      self
     end
 
     # Write buffer write changes to buffer and return
     def write_buffer(io = ::StringIO.new(''))
-      ::Zip::OutputStream.write_buffer(io) do |zos|
+      ::Zip::OutputStream.write_buffer(io, @encrypter) do |zos|
         @entry_set.each { |e| e.write_to_zip_output_stream(zos) }
         zos.comment = comment
       end
